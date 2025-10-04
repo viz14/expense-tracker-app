@@ -27,24 +27,30 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleApprove = async (expenseId: number) => {
+  const handleApprove = (expenseId: number) => {
     setActionLoading(expenseId);
-    try {
-      await expenseAPI.approveExpense(expenseId);
-      await loadExpenses();
-    } catch (error) {
-      console.error('Failed to approve expense:', error);
-    } finally {
-      setActionLoading(null);
-    }
+  
+    setTimeout(async () => {
+      try {
+        const res = await expenseAPI.approveExpense(expenseId);
+        setExpenses(expenses.map(e => (e.id === expenseId ? res.expense : e)));
+      } catch (error) {
+        console.error('Failed to approve expense:', error);
+      } finally {
+        setActionLoading(null);
+      }
+    }, 300); // 300ms small delay to ensure backend updates are persisted
   };
+  
+  
 
   const handleReject = async (expenseId: number) => {
     const comments = prompt('Rejection reason (optional):');
     setActionLoading(expenseId);
     try {
-      await expenseAPI.rejectExpense(expenseId, comments || undefined);
-      await loadExpenses();
+      const res = await expenseAPI.rejectExpense(expenseId, comments || undefined);
+      setExpenses(expenses.map(e => e.id === expenseId ? res.expense : e));
+
     } catch (error) {
       console.error('Failed to reject expense:', error);
     } finally {
@@ -53,10 +59,11 @@ export const Dashboard: React.FC = () => {
   };
 
   const myExpenses = expenses.filter(e => e.userId === user?.id);
-  const pendingApprovals = expenses.filter(e =>
-    e.status === 'Pending' &&
-    e.approvals?.some(a => a.approverId === user?.id && a.status === 'Pending')
-  );
+  const pendingApprovals =
+  (user?.role === 'Manager' || user?.role === 'Admin')
+    ? expenses.filter(e => e.status === 'Pending')
+    : [];
+
 
   const totalPending = myExpenses.filter(e => e.status === 'Pending').reduce((sum, e) => sum + e.amount, 0);
   const totalApproved = myExpenses.filter(e => e.status === 'Approved').reduce((sum, e) => sum + e.amount, 0);

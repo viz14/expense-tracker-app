@@ -118,14 +118,17 @@ export const approveExpense = (req, res) => {
     const { comments } = req.body;
     const approverId = req.userId;
 
-    const expense = getExpenseById(parseInt(id));
+    const expenseId = parseInt(id);
+    const expense = getExpenseById(expenseId);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
 
-    updateApprovalStatus(parseInt(id), approverId, 'Approved', comments);
+    // Update this approver's status
+   
+    
 
-    const approvalStatus = checkAllApprovalsComplete(parseInt(id));
+    const approvalStatus = checkAllApprovalsComplete(expenseId);
     const rules = getApprovalRules();
 
     let finalStatus = 'Pending';
@@ -134,16 +137,18 @@ export const approveExpense = (req, res) => {
       finalStatus = 'Rejected';
     } else if (approvalStatus.total > 0) {
       const percentageApproved = (approvalStatus.approved / approvalStatus.total) * 100;
-
       let ruleMatched = false;
+
       for (const rule of rules) {
         if (rule.ruleType === 'percentage' && percentageApproved >= rule.percentageRequired) {
           finalStatus = 'Approved';
           ruleMatched = true;
           break;
         } else if (rule.ruleType === 'specific' && approvalStatus.approved > 0) {
-          const approvals = getApprovalsByExpense(parseInt(id));
-          const specificApproved = approvals.some(a => a.approverId === rule.specificApproverId && a.status === 'Approved');
+          const approvals = getApprovalsByExpense(expenseId);
+          const specificApproved = approvals.some(
+            a => a.approverId === rule.specificApproverId && a.status === 'Approved'
+          );
           if (specificApproved) {
             finalStatus = 'Approved';
             ruleMatched = true;
@@ -157,35 +162,45 @@ export const approveExpense = (req, res) => {
       }
     }
 
-    updateExpenseStatus(parseInt(id), finalStatus);
+    // ✅ Persist final status to database
+    updateApprovalStatus(expenseId, approverId, 'Approved', comments);
+    
+    updateExpenseStatus(expenseId, finalStatus);
+
+    // ✅ Re-fetch the latest data from DB
+    const updatedExpense = getExpenseById(expenseId);
+    const updatedApprovals = getApprovalsByExpense(expenseId);
 
     res.status(200).json({
       message: 'Expense approved successfully',
-      status: finalStatus
+      expense: { ...updatedExpense, approvals: updatedApprovals },
     });
   } catch (error) {
     console.error('Approve expense error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };
-
 export const rejectExpense = (req, res) => {
   try {
     const { id } = req.params;
     const { comments } = req.body;
     const approverId = req.userId;
 
-    const expense = getExpenseById(parseInt(id));
+    const expenseId = parseInt(id);
+    const expense = getExpenseById(expenseId);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
 
-    updateApprovalStatus(parseInt(id), approverId, 'Rejected', comments);
-    updateExpenseStatus(parseInt(id), 'Rejected');
+    updateApprovalStatus(expenseId, approverId, 'Rejected', comments);
+    updateExpenseStatus(expenseId, 'Rejected');
+
+    const updatedExpense = getExpenseById(expenseId);
+    const updatedApprovals = getApprovalsByExpense(expenseId);
 
     res.status(200).json({
       message: 'Expense rejected successfully',
-      status: 'Rejected'
+      expense: { ...updatedExpense, approvals: updatedApprovals },
     });
   } catch (error) {
     console.error('Reject expense error:', error);
